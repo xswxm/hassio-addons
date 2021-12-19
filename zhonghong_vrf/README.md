@@ -2,7 +2,7 @@
 
 ## 关于
 
-[zhonghong_vrf](https://github.com/xswxm/zhonghong_vrf/blob/master/README.md)是一个基于HTTP控制中弘空调的应用。
+[zhonghong_vrf](https://github.com/xswxm/hassio-addons/blob/main/zhonghong_vrf/README.md)是一个基于HTTP控制中弘空调的应用。
 
 
 ## 配置
