@@ -10,7 +10,7 @@ arch:
   - armv7
   - i386
 boot: auto
-image: xswxm/{arch}-addon-zhonghong_vrf
+#image: xswxm/{arch}-addon-zhonghong_vrf
 options:
   broker: "192.168.123.200"
   port: "1883"
