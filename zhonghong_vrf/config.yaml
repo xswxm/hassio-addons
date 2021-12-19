@@ -1,5 +1,5 @@
 name: "Zhonghong VRF"
-version: "0.1.1"
+version: "0.1.2"
 slug: "zhonghong_vrf"
 description: "HTTP based Zhonghong vrf controller"
 url: "https://github.com/xswxm/hassio-addons/tree/main/zhonghong_vrf",
