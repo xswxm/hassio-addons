@@ -21,6 +21,7 @@ services:
 
 ## configuration.yaml 配置
 注意：请根据自己的硬盘情况将sda替换为自己硬盘符，按实将以下示例添加到configuration.yaml文件中，有几个硬盘添加几遍。
+```yaml
   - platform: mqtt
     name: "sda health"
     state_topic: "homeassistant/diskinfo/sda"
@@ -30,6 +31,7 @@ services:
     state_topic: "homeassistant/diskinfo/sda"
     unit_of_measurement: "℃"
     value_template: "{{ value_json.temperature }}"
+```
 
 ## 配置
 
