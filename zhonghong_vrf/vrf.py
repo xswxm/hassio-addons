@@ -27,30 +27,16 @@ def get_config():
     CONFIG_PATH = "/data/options.json"
     with open(CONFIG_PATH) as fp:
         config = json.load(fp)
-
-    #parser = argparse.ArgumentParser(description='http-based python server for the zhonghong vrf gateway.')
-    #parser.add_argument('-b', '--broker', help='IP of mqtt Broker', default='192.168.123.200')
-    #parser.add_argument('-p', '--port', help='Port of mqtt Broker', default='1883')
-    #parser.add_argument('-n', '--username', help='Username of mqtt Broker', default='mqtt')
-    #parser.add_argument('-w', '--password', help='Password of mqtt Broker', default='mqtt')
-    #parser.add_argument('-g', '--gateway', help='IP of Zhonghong Gateway', default='192.168.123.251')
-    #args = parser.parse_args()
-    #config['broker'] = args.broker
-    #config['port'] = args.port
-    #config['username'] = args.username
-    #config['password'] = args.password
-    #config['gateway'] = args.gateway
-
-    logging.info("Config loaded: {0}".format(config))
+    logging.info (" {0}: Config loaded: {1}".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), config))
     return config
 
 def connect_mqtt() -> mqtt_client:
     global CONFIG
     def on_connect(client, userdata, flags, rc):
         if rc == 0:
-            logging.info(f"Connected to MQTT Broker!")
+            logging.info(" {0}: Connected to MQTT Broker!".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))))
         else:
-            logging.info(f"Failed to connect, return code %d\n", rc)
+            logging.info(" {0}: Failed to connect, return code {1}\n".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))), rc)
     client_id = time.strftime('%Y%m%d%H%M%S',time.localtime(time.time()))
     client = mqtt_client.Client(client_id)
     client.username_pw_set(username=CONFIG['username'], password=CONFIG['password'])
@@ -61,7 +47,7 @@ def connect_mqtt() -> mqtt_client:
 # subscribe mqtt topic and receive msg
 def subscribe(client: mqtt_client):
     def on_message(client, userdata, msg):
-        logging.info(f"Received `{msg.payload.decode()}` from `{msg.topic}` topic")
+        logging.info(" {0}: Received `{0}` from `{1}` topic".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))), msg.payload.decode(), msg.topic)
         oi = msg.topic.split('/')[3].split('_')
 
         ac_temp = {}
@@ -91,9 +77,9 @@ def publish(client, topic, msg):
     result = client.publish(topic, msg)
     status = result[0]
     if status == 0:
-        logging.info(f"Send `{str(msg)}` to topic `{topic}`")
+        logging.info(" {0}: Publish `{1} to `{2}` topic".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), msg, topic))
     else:
-        logging.info(f"Failed to send message to topic {topic}")
+        logging.info(" {0}: Failed to send message to topic {1}".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), topic))
 
 # get states for all air conditioners
 def get_acs():
@@ -126,7 +112,7 @@ def get_acs():
 def set_ac(ac):
     global CONFIG
     api = "http://{0}/cgi-bin/api.html?f=18&idx={1}&on={2}&mode={3}&tempSet={4}&fan={5}".format(CONFIG['gateway'], ac['idx'], ac['on'], ac['mode'], ac['tempSet'], ac['fan'])
-    logging.info("Set: {0}".format(api))
+    logging.info(" {0}: Set: {01}".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), api))
     try:
         r = requests.get(api, auth=('admin',''), proxies = {'http': None, 'https': None})
     except Exception as e:
@@ -136,12 +122,48 @@ def set_ac(ac):
         else:
             msg = ''
 
+def print_instructions(acs):
+    print("注意: 如果首次使用home assistant发现不了设备，请将以下配置手动添加到configuration.yaml中，并重启home assistant。")
+    print("---------------------------------------------START---------------------------------------------")
+    print("climate:")
+    for ac in acs:
+        print(print_configuration(ac))
+    print("---------------------------------------------E N D---------------------------------------------")
+
+def print_configuration(ac):
+    str_ac = "  - platform: mqtt\n"
+    str_ac += "    name: zhonghong_hvac_{0}_{1}\n".format(ac['oa'], ac['ia'])
+    str_ac += '\
+    modes:\n\
+      - "heat"\n\
+      - "cool"\n\
+      - "dry"\n\
+      - "fan_only"\n\
+      - "off"\n\
+    fan_modes:\n\
+      - "auto"\n\
+      - "low"\n\
+      - "medium"\n\
+      - "high"\n\
+      - "silent"\n'
+    str_ac += '    power_command_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/on/set"\n'.format(ac['oa'], ac['ia'])
+    str_ac += '    mode_command_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/mode/set"\n'.format(ac['oa'], ac['ia'])
+    str_ac += '    temperature_command_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/temp/set"\n'.format(ac['oa'], ac['ia'])
+    str_ac += '    fan_mode_command_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/fan/set"\n'.format(ac['oa'], ac['ia'])
+    str_ac += '    mode_state_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/mode/state"\n'.format(ac['oa'], ac['ia'])
+    str_ac += '    temperature_state_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/temp/state"\n'.format(ac['oa'], ac['ia'])
+    str_ac += '    current_temperature_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/cur_temp/state"\n'.format(ac['oa'], ac['ia'])
+    str_ac += '    fan_mode_state_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/fan/state"\n'.format(ac['oa'], ac['ia'])
+    str_ac += '    precision: 1.0'
+    return str_ac
+
 def sync_acs(client):
     global acs, STATES
     acs_temp = get_acs()
 
     if acs == None:   # setup ac_list if it is empty
         acs = copy.deepcopy(acs_temp)
+        print_instructions(acs)
         for ac in acs:
             # Subscribe
             client.subscribe("homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/set".format(ac['oa'], ac['ia'], 'on'))
@@ -156,34 +178,29 @@ def sync_acs(client):
                 client.publish("homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'mode'), STATES['mode'][0])
             client.publish("homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'temp'), ac['tempSet'])
             client.publish("homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'cur_temp'), ac['tempIn'])
-            client.publish("homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'fan'), STATES['fan'][ac['fan']])
     else:
         for ac_temp in acs_temp:
             for ac in acs:
                 if ac['oa'] == ac_temp['oa'] and ac['ia'] == ac_temp['ia']:
                     if ac['on'] != ac_temp['on'] or ac['mode'] != ac_temp['mode']:
-                        logging.info ("Publish on: {0}".format(STATES['on'][ac_temp['on']]))
+                        logging.info (" {0}: Publish on: {1}".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), STATES['on'][ac_temp['on']]))
                         topic = "homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'mode')
                         msg = STATES['mode'][ac_temp['mode']]
                         if ac_temp['on'] == 0:
                             msg = STATES['mode'][0]
-                        client.publish(topic, msg)
-                        logging.info (f"Publish `{msg}` to `{topic}` topic")
+                        publish(client, topic, msg)
                     if ac['tempSet'] != ac_temp['tempSet']:
                         topic = "homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'temp')
                         msg = ac_temp['tempSet']
-                        client.publish(topic, msg)
-                        logging.info (f"Publish `{msg}` to `{topic}` topic")
+                        publish(client, topic, msg)
                     if ac['tempIn'] != ac_temp['tempIn']:
                         topic = "homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'cur_temp')
                         msg = ac_temp['tempIn']
-                        client.publish(topic, msg)
-                        logging.info (f"Publish `{msg}` to `{topic}` topic")
+                        publish(client, topic, msg)
                     if ac['fan'] != ac_temp['fan']:
                         topic = "homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'fan')
                         msg = STATES['fan'][ac_temp['fan']]
-                        client.publish(topic, msg)
-                        logging.info (f"Publish `{msg}` to `{topic}` topic")
+                        publish(client, topic, msg)
                     break
         # update acs
         acs = copy.deepcopy(acs_temp)
