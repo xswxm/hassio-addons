@@ -123,14 +123,15 @@ def set_ac(ac):
             msg = ''
 
 def print_instructions(acs):
-    print("注意: 如果首次使用home assistant发现不了设备，请将以下配置手动添加到configuration.yaml中，并重启home assistant。")
-    print("---------------------------------------------START---------------------------------------------")
-    print("climate:")
+    str_acs = "\n注意: 如果首次使用home assistant发现不了设备，请将以下配置手动添加到configuration.yaml中，并重启home assistant。\n"
+    str_acs += "---------------------------------------------START---------------------------------------------\n"
+    str_acs += "climate:\n"
     for ac in acs:
-        print(print_configuration(ac))
-    print("---------------------------------------------E N D---------------------------------------------")
+        str_acs += get_configuration(ac)
+    str_acs += "---------------------------------------------E N D---------------------------------------------"
+    logging.info(str_acs)
 
-def print_configuration(ac):
+def get_configuration(ac):
     str_ac = "  - platform: mqtt\n"
     str_ac += "    name: zhonghong_hvac_{0}_{1}\n".format(ac['oa'], ac['ia'])
     str_ac += '\
@@ -154,7 +155,7 @@ def print_configuration(ac):
     str_ac += '    temperature_state_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/temp/state"\n'.format(ac['oa'], ac['ia'])
     str_ac += '    current_temperature_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/cur_temp/state"\n'.format(ac['oa'], ac['ia'])
     str_ac += '    fan_mode_state_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/fan/state"\n'.format(ac['oa'], ac['ia'])
-    str_ac += '    precision: 1.0'
+    str_ac += '    precision: 1.0\n'
     return str_ac
 
 def sync_acs(client):
