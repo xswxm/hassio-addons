@@ -47,7 +47,7 @@ def connect_mqtt() -> mqtt_client:
 # subscribe mqtt topic and receive msg
 def subscribe(client: mqtt_client):
     def on_message(client, userdata, msg):
-        logging.info(" {0}: Received `{1}` from `{2}` topic".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))), msg.payload.decode(), msg.topic)
+        logging.info(" {0}: Received `{1}` from `{2}` topic".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), msg.payload.decode(), msg.topic))
         oi = msg.topic.split('/')[3].split('_')
 
         ac_temp = {}
