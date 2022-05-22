@@ -27,7 +27,7 @@ def get_config():
     CONFIG_PATH = "/data/options.json"
     with open(CONFIG_PATH) as fp:
         config = json.load(fp)
-    logging.info (" {0}: Config loaded: {1}".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), config))
+    logging.info(" {0}: Config loaded: {1}".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), config))
     return config
 
 def connect_mqtt() -> mqtt_client:
@@ -47,7 +47,7 @@ def connect_mqtt() -> mqtt_client:
 # subscribe mqtt topic and receive msg
 def subscribe(client: mqtt_client):
     def on_message(client, userdata, msg):
-        logging.info(" {0}: Received `{0}` from `{1}` topic".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))), msg.payload.decode(), msg.topic)
+        logging.info(" {0}: Received `{1}` from `{2}` topic".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))), msg.payload.decode(), msg.topic)
         oi = msg.topic.split('/')[3].split('_')
 
         ac_temp = {}
@@ -112,7 +112,7 @@ def get_acs():
 def set_ac(ac):
     global CONFIG
     api = "http://{0}/cgi-bin/api.html?f=18&idx={1}&on={2}&mode={3}&tempSet={4}&fan={5}".format(CONFIG['gateway'], ac['idx'], ac['on'], ac['mode'], ac['tempSet'], ac['fan'])
-    logging.info(" {0}: Set: {01}".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), api))
+    logging.info(" {0}: Set: {1}".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), api))
     try:
         r = requests.get(api, auth=('admin',''), proxies = {'http': None, 'https': None})
     except Exception as e:
@@ -184,7 +184,7 @@ def sync_acs(client):
             for ac in acs:
                 if ac['oa'] == ac_temp['oa'] and ac['ia'] == ac_temp['ia']:
                     if ac['on'] != ac_temp['on'] or ac['mode'] != ac_temp['mode']:
-                        logging.info (" {0}: Publish on: {1}".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), STATES['on'][ac_temp['on']]))
+                        logging.info(" {0}: Publish on: {1}".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), STATES['on'][ac_temp['on']]))
                         topic = "homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'mode')
                         msg = STATES['mode'][ac_temp['mode']]
                         if ac_temp['on'] == 0:
