@@ -23,7 +23,7 @@ def setConfig():
     CONFIG['username'] = "mqtt"
     CONFIG['password'] = "mqtt"
 
-def loadConfig(CONFIG_PATH):
+def loadConfig(CONFIG_PATH = '/data/options.json'):
     global CONFIG
     CONFIG = {}
     with open(CONFIG_PATH) as fp:
