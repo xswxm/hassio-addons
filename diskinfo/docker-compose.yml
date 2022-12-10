@@ -1,9 +1,0 @@
-version: "3.9"
-services:
-  diskinfo:
-    container_name: addon_diskinfo
-    privileged: true
-    restart: unless-stopped
-    image: xswxm/diskinfo:0.0.1
-    volumes:
-      - ${PWD}/options.json:/data/options.json:ro

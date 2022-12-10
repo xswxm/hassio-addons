@@ -1,34 +1,34 @@
+# -*- coding: utf-8 -*-
+
 import requests
 import json
 import logging
 import time
 from paho.mqtt import client as mqtt_client
-import copy
-#import argparse
 
-#logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO)
 
-#'{"err":0,"unit":[
-# {"oa":1,"ia":1,"nm":"","on":0,"mode":2,"alarm":0,
-# "tempSet":"24","tempIn":"23","fan":1,"idx":0,"grp":0,"OnoffLock":0,
-# "tempLock":0,"highestVal":26,"lowestVal":26,"modeLock":0,
-# "FlowDirection1":0,"FlowDirection2":0,"MainRmc":0},
-# {"oa":1,"ia":2,"nm":"","on":0,"mode":1,"alarm":0,"tempSet":"20","tempIn":"23","fan":1,"idx":1,"grp":0,"OnoffLock":0,"tempLock":0,"highestVal":26,"lowestVal":26,"modeLock":0,"FlowDirection1":0,"FlowDirection2":0,"MainRmc":0},{"oa":1,"ia":3,"nm":"","on":0,"mode":1,"alarm":0,"tempSet":"25","tempIn":"23","fan":1,"idx":2,"grp":0,"OnoffLock":0,"tempLock":0,"highestVal":26,"lowestVal":26,"modeLock":0,"FlowDirection1":0,"FlowDirection2":0,"MainRmc":0},{"oa":1,"ia":4,"nm":"","on":0,"mode":8,"alarm":0,"tempSet":"26","tempIn":"23","fan":1,"idx":3,"grp":0,"OnoffLock":0,"tempLock":0,"highestVal":26,"lowestVal":26,"modeLock":0,"FlowDirection1":0,"FlowDirection2":0,"MainRmc":0},{"oa":1,"ia":5,"nm":"","on":1,"mode":8,"alarm":0,"tempSet":"27","tempIn":"37","fan":4,"idx":4,"grp":0,"OnoffLock":0,"tempLock":0,"highestVal":27,"lowestVal":27,"modeLock":0,"FlowDirection1":0,"FlowDirection2":0,"MainRmc":0}]}'
-
-acs = None
-CONFIG = {}
 STATES = {'on':{0:'OFF', 1:'ON','OFF':0,'ON':1},
     'mode':{0:'off',1:'cool',2:'dry',4:'fan_only',8:'heat','off':0,'cool':1,'dry':2,'fan_only':4,'heat':8},
     'fan':{0:'auto',1:'high',2:'medium',4:'low',6:'silent','auto':0,'high':1,'medium':2,'low':4,'silent':8}}
+CONFIG = {}
+acs = []
 
-def get_config():
-    config = {}
-    CONFIG_PATH = "/data/options.json"
+def setConfig():
+    global CONFIG
+    CONFIG = {}
+    CONFIG['broker'] = "192.168.123.10"
+    CONFIG['port'] = 1883
+    CONFIG['gateway'] = "192.168.123.251"
+    CONFIG['username'] = "mqtt"
+    CONFIG['password'] = "mqtt"
+
+def loadConfig(CONFIG_PATH):
+    global CONFIG
+    CONFIG = {}
     with open(CONFIG_PATH) as fp:
-        config = json.load(fp)
-    logging.info(" {0}: Config loaded: {1}".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), config))
-    return config
+        CONFIG = json.load(fp)
+    logging.info (" {0}: Config loaded: {1}".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), CONFIG))
 
 def connect_mqtt() -> mqtt_client:
     global CONFIG
@@ -48,27 +48,29 @@ def connect_mqtt() -> mqtt_client:
 def subscribe(client: mqtt_client):
     def on_message(client, userdata, msg):
         logging.info(" {0}: Received `{1}` from `{2}` topic".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), msg.payload.decode(), msg.topic))
-        oi = msg.topic.split('/')[3].split('_')
+        object_id = msg.topic.split('/')[3]
 
-        ac_temp = {}
-        oa = int(oi[1])
-        ia = int(oi[2])
+        idx = int(object_id.split('_')[1])
         global acs
-        for ac in acs:
-            if ac['oa'] == oa and ac['ia'] == ia:
-                ac_temp = copy.deepcopy(ac)
+        for i in range(len(acs)):
+            if acs[i]['idx'] == idx:
                 break
-        
+        ac = {}
+        ac['idx'] = idx
+        ac['on'] = acs[i]['on']
+        ac['mode'] = acs[i]['mode']
+        ac['tempSet'] = acs[i]['tempSet']
+        ac['fan'] = acs[i]['fan']
         if msg.topic.split('/')[-2] == 'temp':
-            ac_temp['tempSet'] = int(float(msg.payload.decode()))
+            ac['tempSet'] = int(float(msg.payload.decode()))
         else:
             global STATES
-            ac_temp[msg.topic.split('/')[-2]] = STATES[msg.topic.split('/')[-2]][msg.payload.decode()]
+            ac[msg.topic.split('/')[-2]] = STATES[msg.topic.split('/')[-2]][msg.payload.decode()]
         if msg.topic.split('/')[-2] == 'mode' and msg.payload.decode() == 'off':
-            ac_temp['on'] = 0
+            ac['on'] = 0
         else:
-            ac_temp['on'] = 1
-        set_ac(ac_temp)
+            ac['on'] = 1
+        setAC(ac)
 
     client.on_message = on_message
 
@@ -82,7 +84,10 @@ def publish(client, topic, msg):
         logging.info(" {0}: Failed to send message to topic {1}".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), topic))
 
 # get states for all air conditioners
-def get_acs():
+def getACList():
+    # global acs_sample
+    # return acs_sample['unit']
+
     global CONFIG
     api = 'http://{0}/cgi-bin/api.html?f=17&p={1}'
     i = 0
@@ -109,7 +114,7 @@ def get_acs():
     return acs_temp
 
 # set values for a air conditioner
-def set_ac(ac):
+def setAC(ac):
     global CONFIG
     api = "http://{0}/cgi-bin/api.html?f=18&idx={1}&on={2}&mode={3}&tempSet={4}&fan={5}".format(CONFIG['gateway'], ac['idx'], ac['on'], ac['mode'], ac['tempSet'], ac['fan'])
     logging.info(" {0}: Set: {1}".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), api))
@@ -122,95 +127,107 @@ def set_ac(ac):
         else:
             msg = ''
 
-def print_instructions(acs):
-    str_acs = "\n注意: 如果首次使用home assistant发现不了设备，请将以下配置手动添加到configuration.yaml中，并重启home assistant。\n"
-    str_acs += "---------------------------------------------START---------------------------------------------\n"
-    str_acs += "climate:\n"
+def createClimates(client):
+    global acs
+    acs = getACList()
     for ac in acs:
-        str_acs += get_configuration(ac)
-    str_acs += "---------------------------------------------E N D---------------------------------------------"
-    logging.info(str_acs)
+        object_id = "ac_{0}".format(ac['idx'])
+        # removeClimate(object_id)
+        createClimate(object_id)
+    syncACList(client, True)
 
-def get_configuration(ac):
-    str_ac = "  - platform: mqtt\n"
-    str_ac += "    name: zhonghong_hvac_{0}_{1}\n".format(ac['oa'], ac['ia'])
-    str_ac += '\
-    modes:\n\
-      - "heat"\n\
-      - "cool"\n\
-      - "dry"\n\
-      - "fan_only"\n\
-      - "off"\n\
-    fan_modes:\n\
-      - "auto"\n\
-      - "low"\n\
-      - "medium"\n\
-      - "high"\n\
-      - "silent"\n'
-    str_ac += '    power_command_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/on/set"\n'.format(ac['oa'], ac['ia'])
-    str_ac += '    mode_command_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/mode/set"\n'.format(ac['oa'], ac['ia'])
-    str_ac += '    temperature_command_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/temp/set"\n'.format(ac['oa'], ac['ia'])
-    str_ac += '    fan_mode_command_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/fan/set"\n'.format(ac['oa'], ac['ia'])
-    str_ac += '    mode_state_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/mode/state"\n'.format(ac['oa'], ac['ia'])
-    str_ac += '    temperature_state_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/temp/state"\n'.format(ac['oa'], ac['ia'])
-    str_ac += '    current_temperature_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/cur_temp/state"\n'.format(ac['oa'], ac['ia'])
-    str_ac += '    fan_mode_state_topic: "homeassistant/climate/zhonghong/ac_{0}_{1}/fan/state"\n'.format(ac['oa'], ac['ia'])
-    str_ac += '    precision: 1.0\n'
-    return str_ac
+def createClimate(object_id, name = None, device_class = None, icon = None, temperature_unit = "C", node_id = "zhonghong", component = "climate", discovery_prefix = "homeassistant"):
+    device = {}
+    device["identifiers"] = ["ZhongHong VRF"]
+    device["name"] = "ZhongHong VRF"
+    device["manufacturer"] = "xswxm"
+    device["model"] = "V100"
+    device["sw_version"] = "0.3.0"
+    
+    topic = "{0}/{1}/{2}/{3}/config".format(discovery_prefix, component, node_id, object_id)
 
-def sync_acs(client):
-    global acs, STATES
-    acs_temp = get_acs()
+    payload = {}
+    payload["device"] = device
+    payload["temp_unit"] = temperature_unit
+    payload["force_update"] = True
 
-    if acs == None:   # setup ac_list if it is empty
-        acs = copy.deepcopy(acs_temp)
-        print_instructions(acs)
-        for ac in acs:
-            # Subscribe
-            client.subscribe("homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/set".format(ac['oa'], ac['ia'], 'on'))
-            client.subscribe("homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/set".format(ac['oa'], ac['ia'], 'mode'))
-            client.subscribe("homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/set".format(ac['oa'], ac['ia'], 'temp'))
-            client.subscribe("homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/set".format(ac['oa'], ac['ia'], 'fan'))
-            # Publish
-            # client.publish("homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/set".format(ac['oa'], ac['ia'], 'on'), STATES['on'][ac['on']])
-            if ac['on'] == 1:
-                client.publish("homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'mode'), STATES['mode'][ac['mode']])
-            else:
-                client.publish("homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'mode'), STATES['mode'][0])
-            client.publish("homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'temp'), ac['tempSet'])
-            client.publish("homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'cur_temp'), ac['tempIn'])
-    else:
-        for ac_temp in acs_temp:
-            for ac in acs:
-                if ac['oa'] == ac_temp['oa'] and ac['ia'] == ac_temp['ia']:
-                    if ac['on'] != ac_temp['on'] or ac['mode'] != ac_temp['mode']:
-                        logging.info(" {0}: Publish on: {1}".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), STATES['on'][ac_temp['on']]))
-                        topic = "homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'mode')
-                        msg = STATES['mode'][ac_temp['mode']]
-                        if ac_temp['on'] == 0:
-                            msg = STATES['mode'][0]
-                        publish(client, topic, msg)
-                    if ac['tempSet'] != ac_temp['tempSet']:
-                        topic = "homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'temp')
-                        msg = ac_temp['tempSet']
-                        publish(client, topic, msg)
-                    if ac['tempIn'] != ac_temp['tempIn']:
-                        topic = "homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'cur_temp')
-                        msg = ac_temp['tempIn']
-                        publish(client, topic, msg)
-                    if ac['fan'] != ac_temp['fan']:
-                        topic = "homeassistant/climate/zhonghong/ac_{0}_{1}/{2}/state".format(ac['oa'], ac['ia'], 'fan')
-                        msg = STATES['fan'][ac_temp['fan']]
-                        publish(client, topic, msg)
-                    break
-        # update acs
-        acs = copy.deepcopy(acs_temp)
+    payload["unique_id"] = "{0}_{1}".format(node_id, object_id)
+    payload["object_id"] = "{0}_{1}".format(node_id, object_id)
+    if icon != None:
+        payload["icon"] = icon
+    if device_class != None:
+        payload["device_class"] = device_class
+    payload["name"] = "zhonghong_{0}".format(object_id)
+    payload["modes"] = [
+		"heat",
+		"cool",
+		"dry",
+		"fan_only",
+		"off"
+	]
+    payload["fan_modes"] = [
+		"auto",
+		"low",
+		"medium",
+		"high",
+		"silent"
+	]
+    payload["power_command_topic"] = "{0}/{1}/{2}/{3}/{4}/set".format(discovery_prefix, component, node_id, object_id, 'on')
+    payload["mode_command_topic"] = "{0}/{1}/{2}/{3}/{4}/set".format(discovery_prefix, component, node_id, object_id, 'mode')
+    payload["temperature_command_topic"] = "{0}/{1}/{2}/{3}/{4}/set".format(discovery_prefix, component, node_id, object_id, 'temp')
+    payload["fan_mode_command_topic"] = "{0}/{1}/{2}/{3}/{4}/set".format(discovery_prefix, component, node_id, object_id, 'fan')
+
+    payload["mode_state_topic"] = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'mode')
+    payload["temperature_state_topic"] = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'temp')
+    payload["current_temperature_topic"] = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'cur_temp')
+    payload["fan_mode_state_topic"] = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'fan')
+    payload["temp_step"] = 1.0
+    publish(client, topic, json.dumps(payload))
+    client.subscribe("{0}/{1}/{2}/{3}/{4}/set".format(discovery_prefix, component, node_id, object_id, 'on'))
+    client.subscribe("{0}/{1}/{2}/{3}/{4}/set".format(discovery_prefix, component, node_id, object_id, 'mode'))
+    client.subscribe("{0}/{1}/{2}/{3}/{4}/set".format(discovery_prefix, component, node_id, object_id, 'temp'))
+    client.subscribe("{0}/{1}/{2}/{3}/{4}/set".format(discovery_prefix, component, node_id, object_id, 'fan'))
+
+def removeClimate(object_id, node_id = "zhonghong", component = "climate", discovery_prefix = "homeassistant"):
+    topic = "{0}/{1}/{2}/{3}/config".format(discovery_prefix, component, node_id, object_id)
+    publish(client, topic, json.dumps(''))
+
+def syncACList(client, forseSync = False, node_id = "zhonghong", component = "climate", discovery_prefix = "homeassistant"):
+    global STATES, acs
+    acs_temp = getACList()
+    
+    for i in range(len(acs)):
+        object_id = "ac_{0}".format(acs[i]['idx'])
+        if forseSync or acs[i]['on'] != acs_temp[i]['on'] or acs[i]['mode'] != acs_temp[i]['mode']:
+            acs[i]['on'] = acs_temp[i]['on']
+            acs[i]['mode'] = acs_temp[i]['mode']
+            topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'mode')
+            msg = STATES['mode'][0]  if acs[i]['on'] == 0 else STATES['mode'][acs[i]['mode']]
+            publish(client, topic, msg)
+        if forseSync or acs[i]['tempSet'] != acs_temp[i]['tempSet']:
+            acs[i]['tempSet'] = acs_temp[i]['tempSet']
+            topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'temp')
+            msg = int(acs[i]['tempSet'])  
+            publish(client, topic, msg)
+        if forseSync or acs[i]['tempIn'] != acs_temp[i]['tempIn']:
+            acs[i]['tempIn'] = acs_temp[i]['tempIn']
+            topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'cur_temp')
+            msg = int(acs[i]['tempIn'])
+            publish(client, topic, msg)
+        if forseSync or acs[i]['fan'] != acs_temp[i]['fan']:
+            acs[i]['fan'] = acs_temp[i]['fan']
+            topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'fan')
+            msg = STATES['fan'][acs[i]['fan']]
+            publish(client, topic, msg)
 
 if __name__ == '__main__':
-    CONFIG = get_config()
+    # setConfig()
+    loadConfig()
     client = connect_mqtt()
     subscribe(client)
     client.loop_start()
+
+    createClimates(client)
     while True:
-        sync_acs(client)
         time.sleep(1)
+        syncACList(client)

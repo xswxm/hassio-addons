@@ -1,0 +1,11 @@
+{
+  "api": "saylove",
+  "key": "你的apikey",
+  "push_time": "12:00:00",
+  "corpid": "企业微信corpid",
+  "corpsecret": "企业微信corpsecret",
+  "agentid": "企业微信agentid",
+  "touser": "@all",
+  "http_proxy": "HTTP代理服务",
+  "https_proxy": "HTTPS代理服务"
+}
