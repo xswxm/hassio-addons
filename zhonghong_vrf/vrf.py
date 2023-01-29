@@ -127,14 +127,46 @@ def setAC(ac):
         else:
             msg = ''
 
-def createClimates(client):
+def initializeClimates(client, node_id = "zhonghong", component = "climate", discovery_prefix = "homeassistant"):
     global acs
     acs = getACList()
     for ac in acs:
         object_id = "ac_{0}".format(ac['idx'])
+        # Create Climate
         # removeClimate(object_id)
         createClimate(object_id)
-    syncACList(client, True)
+
+        # Update Values
+        topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'mode')
+        msg = STATES['mode'][0]  if ac['on'] == 0 else STATES['mode'][ac['mode']]
+        publish(client, topic, msg)
+        topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'temp')
+        msg = int(ac['tempSet'])  
+        publish(client, topic, msg)
+        topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'cur_temp')
+        msg = int(ac['tempIn'])
+        publish(client, topic, msg)
+        topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'fan')
+        msg = STATES['fan'][ac['fan']]
+        publish(client, topic, msg)
+
+    count = 2
+    while count > 0:
+        for ac in acs:
+            # Update Values
+            topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'mode')
+            msg = STATES['mode'][0]  if ac['on'] == 0 else STATES['mode'][ac['mode']]
+            publish(client, topic, msg)
+            topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'temp')
+            msg = int(ac['tempSet'])  
+            publish(client, topic, msg)
+            topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'cur_temp')
+            msg = int(ac['tempIn'])
+            publish(client, topic, msg)
+            topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'fan')
+            msg = STATES['fan'][ac['fan']]
+            publish(client, topic, msg)
+        count = count - 1
 
 def createClimate(object_id, name = None, device_class = None, icon = None, temperature_unit = "C", node_id = "zhonghong", component = "climate", discovery_prefix = "homeassistant"):
     device = {}
@@ -166,12 +198,12 @@ def createClimate(object_id, name = None, device_class = None, icon = None, temp
 		"off"
 	]
     payload["fan_modes"] = [
-		"auto",
 		"low",
 		"medium",
-		"high",
-		"silent"
+		"high"
 	]
+    # payload["min_temp"] = 16.0
+    payload["max_temp"] = 29.0
     payload["power_command_topic"] = "{0}/{1}/{2}/{3}/{4}/set".format(discovery_prefix, component, node_id, object_id, 'on')
     payload["mode_command_topic"] = "{0}/{1}/{2}/{3}/{4}/set".format(discovery_prefix, component, node_id, object_id, 'mode')
     payload["temperature_command_topic"] = "{0}/{1}/{2}/{3}/{4}/set".format(discovery_prefix, component, node_id, object_id, 'temp')
@@ -192,29 +224,29 @@ def removeClimate(object_id, node_id = "zhonghong", component = "climate", disco
     topic = "{0}/{1}/{2}/{3}/config".format(discovery_prefix, component, node_id, object_id)
     publish(client, topic, json.dumps(''))
 
-def syncACList(client, forseSync = False, node_id = "zhonghong", component = "climate", discovery_prefix = "homeassistant"):
+def syncACList(client, node_id = "zhonghong", component = "climate", discovery_prefix = "homeassistant"):
     global STATES, acs
     acs_temp = getACList()
     
     for i in range(len(acs)):
         object_id = "ac_{0}".format(acs[i]['idx'])
-        if forseSync or acs[i]['on'] != acs_temp[i]['on'] or acs[i]['mode'] != acs_temp[i]['mode']:
+        if acs[i]['on'] != acs_temp[i]['on'] or acs[i]['mode'] != acs_temp[i]['mode']:
             acs[i]['on'] = acs_temp[i]['on']
             acs[i]['mode'] = acs_temp[i]['mode']
             topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'mode')
             msg = STATES['mode'][0]  if acs[i]['on'] == 0 else STATES['mode'][acs[i]['mode']]
             publish(client, topic, msg)
-        if forseSync or acs[i]['tempSet'] != acs_temp[i]['tempSet']:
+        if acs[i]['tempSet'] != acs_temp[i]['tempSet']:
             acs[i]['tempSet'] = acs_temp[i]['tempSet']
             topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'temp')
             msg = int(acs[i]['tempSet'])  
             publish(client, topic, msg)
-        if forseSync or acs[i]['tempIn'] != acs_temp[i]['tempIn']:
+        if acs[i]['tempIn'] != acs_temp[i]['tempIn']:
             acs[i]['tempIn'] = acs_temp[i]['tempIn']
             topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'cur_temp')
             msg = int(acs[i]['tempIn'])
             publish(client, topic, msg)
-        if forseSync or acs[i]['fan'] != acs_temp[i]['fan']:
+        if acs[i]['fan'] != acs_temp[i]['fan']:
             acs[i]['fan'] = acs_temp[i]['fan']
             topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'fan')
             msg = STATES['fan'][acs[i]['fan']]
@@ -227,7 +259,7 @@ if __name__ == '__main__':
     subscribe(client)
     client.loop_start()
 
-    createClimates(client)
+    initializeClimates(client)
     while True:
         time.sleep(1)
         syncACList(client)
