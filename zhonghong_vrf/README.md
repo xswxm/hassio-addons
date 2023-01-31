@@ -5,6 +5,8 @@
 [zhonghong_vrf](https://github.com/xswxm/hassio-addons/blob/main/zhonghong_vrf/README.md)是一个基于HTTP控制中弘空调的应用。
 
 ## 版本更新
+0.3.5:
+- 代码优化
 0.3.4:
 - 代码优化
 0.3.0:

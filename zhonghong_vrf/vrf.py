@@ -48,30 +48,37 @@ def connect_mqtt() -> mqtt_client:
 def subscribe(client: mqtt_client):
     def on_message(client, userdata, msg):
         logging.info(" {0}: Received `{1}` from `{2}` topic".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), msg.payload.decode(), msg.topic))
-        object_id = msg.topic.split('/')[3]
 
-        idx = int(object_id.split('_')[1])
-        global acs
-        for i in range(len(acs)):
-            if acs[i]['idx'] == idx:
-                break
-        ac = {}
-        ac['idx'] = idx
-        ac['on'] = acs[i]['on']
-        ac['mode'] = acs[i]['mode']
-        ac['tempSet'] = acs[i]['tempSet']
-        ac['fan'] = acs[i]['fan']
-        if msg.topic.split('/')[-2] == 'temp':
-            ac['tempSet'] = int(float(msg.payload.decode()))
-        else:
-            global STATES
-            ac[msg.topic.split('/')[-2]] = STATES[msg.topic.split('/')[-2]][msg.payload.decode()]
-        if msg.topic.split('/')[-2] == 'mode' and msg.payload.decode() == 'off':
-            ac['on'] = 0
-        else:
-            ac['on'] = 1
-        setAC(ac)
+        try:
+            if "homeassistant/climate/zhonghong/" in msg.topic:
+                object_id = msg.topic.split('/')[3]
 
+                idx = int(object_id.split('_')[1])
+                global acs
+                for i in range(len(acs)):
+                    if acs[i]['idx'] == idx:
+                        break
+                ac = {}
+                ac['idx'] = idx
+                ac['on'] = acs[i]['on']
+                ac['mode'] = acs[i]['mode']
+                ac['tempSet'] = acs[i]['tempSet']
+                ac['fan'] = acs[i]['fan']
+                if msg.topic.split('/')[-2] == 'temp':
+                    ac['tempSet'] = int(float(msg.payload.decode()))
+                else:
+                    global STATES
+                    ac[msg.topic.split('/')[-2]] = STATES[msg.topic.split('/')[-2]][msg.payload.decode()]
+                if msg.topic.split('/')[-2] == 'mode' and msg.payload.decode() == 'off':
+                    ac['on'] = 0
+                else:
+                    ac['on'] = 1
+                setAC(ac)
+
+            elif msg.topic == "homeassistant/zhonghong/initialize":
+                initializeClimates(client)
+        except Exception as e:
+            logging.info(" {0}: Exception `{1}`".format(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), e))
     client.on_message = on_message
 
 # publish state for an air conditioner
@@ -149,24 +156,6 @@ def initializeClimates(client, node_id = "zhonghong", component = "climate", dis
         topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'fan')
         msg = STATES['fan'][ac['fan']]
         publish(client, topic, msg)
-
-    count = 2
-    while count > 0:
-        for ac in acs:
-            # Update Values
-            topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'mode')
-            msg = STATES['mode'][0]  if ac['on'] == 0 else STATES['mode'][ac['mode']]
-            publish(client, topic, msg)
-            topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'temp')
-            msg = int(ac['tempSet'])  
-            publish(client, topic, msg)
-            topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'cur_temp')
-            msg = int(ac['tempIn'])
-            publish(client, topic, msg)
-            topic = "{0}/{1}/{2}/{3}/{4}/state".format(discovery_prefix, component, node_id, object_id, 'fan')
-            msg = STATES['fan'][ac['fan']]
-            publish(client, topic, msg)
-        count = count - 1
 
 def createClimate(object_id, name = None, device_class = None, icon = None, temperature_unit = "C", node_id = "zhonghong", component = "climate", discovery_prefix = "homeassistant"):
     device = {}
@@ -257,9 +246,15 @@ if __name__ == '__main__':
     loadConfig()
     client = connect_mqtt()
     subscribe(client)
+    client.subscribe("homeassistant/zhonghong/initialize")
     client.loop_start()
 
-    initializeClimates(client)
-    while True:
+    count = 2
+    while count > 0:
+        initializeClimates(client)
         time.sleep(1)
+        count = count - 1
+    
+    while True:
         syncACList(client)
+        time.sleep(1)
