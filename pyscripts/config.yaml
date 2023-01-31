@@ -1,0 +1,22 @@
+name: "Python Scripts"
+version: "0.0.11"
+slug: "pyscripts"
+description: "基于python 3.7，运行位于/config/pyscripts/下的python脚本（文件夹可自定义）"
+url: "https://github.com/xswxm/hassio-addons/tree/main/pyscripts"
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+boot: auto
+options:
+  apks: ""
+  packages: ""
+  path: "pyscripts"
+schema:
+  apks: str
+  packages: str
+  path: str
+map:
+  - config:rw
